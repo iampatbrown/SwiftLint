@@ -4,41 +4,30 @@ import PackagePlugin
 @main
 struct SwiftLintPlugin: BuildToolPlugin {
     func createBuildCommands(
-        executable: Path,
-        inputFiles: [Path],
-        pluginWorkDirectory: Path
-    ) -> [Command] {
+        context: PluginContext,
+        target: Target
+    ) async throws -> [Command] {
+        guard let target = target as? SourceModuleTarget else { return [] }
+
+        let inputFiles = target.sourceFiles(withSuffix: "swift").map(\.path)
+
         guard !inputFiles.isEmpty else { return [] }
 
         let arguments = [
             "lint",
-            "--cache-path", "\(pluginWorkDirectory)",
+            "--cache-path", "\(context.pluginWorkDirectory)",
+            "\(context.pluginWorkDirectory.appending("Package.swift"))",
         ] + inputFiles.map(\.string)
 
         return [
             .buildCommand(
                 displayName: "SwiftLint",
-                executable: executable,
+                executable: try context.tool(named: "swiftlint").path,
                 arguments: arguments,
                 inputFiles: inputFiles,
-                outputFiles: [pluginWorkDirectory] // Avoid running every build phase
+                outputFiles: [context.pluginWorkDirectory] // Avoid running every build phase
             ),
         ]
-    }
-
-    func createBuildCommands(
-        context: PluginContext,
-        target: Target
-    ) async throws -> [Command] {
-        guard let target = target as? SourceModuleTarget else { return [] }
-    
-        let inputFiles = target.sourceFiles(withSuffix: "swift").map(\.path)
-
-        return createBuildCommands(
-            executable: try context.tool(named: "swiftlint").path,
-            inputFiles: inputFiles,
-            pluginWorkDirectory: context.pluginWorkDirectory
-        )
     }
 }
 
@@ -54,11 +43,22 @@ extension SwiftLintPlugin: XcodeBuildToolPlugin {
             .filter { $0.type == .source && $0.path.extension == "swift" }
             .map(\.path)
 
-        return createBuildCommands(
-            executable: try context.tool(named: "swiftlint").path,
-            inputFiles: inputFiles,
-            pluginWorkDirectory: context.pluginWorkDirectory
-        )
+        guard !inputFiles.isEmpty else { return [] }
+
+        let arguments = [
+            "lint",
+            "--cache-path", "\(context.pluginWorkDirectory)",
+        ] + inputFiles.map(\.string)
+
+        return [
+            .buildCommand(
+                displayName: "SwiftLint",
+                executable: try context.tool(named: "swiftlint").path,
+                arguments: arguments,
+                inputFiles: inputFiles,
+                outputFiles: [context.pluginWorkDirectory] // Avoid running every build phase
+            ),
+        ]
     }
 }
 #endif
